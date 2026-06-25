@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getCourses, createCourse, deleteCourse } from "../api/courses";
-
+import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 
 const COLORS = [
@@ -16,7 +16,7 @@ const COLORS = [
 export default function CoursePage() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
-
+  const navigate = useNavigate()
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -84,6 +84,7 @@ export default function CoursePage() {
             {data?.map((course) => (
               <div
                 key={course.id}
+                onClick={() => navigate(`/courses/${course.id}`)}
                 className="relative bg-[#141414] border border-[#1f1f1f] rounded-2xl p-5 hover:border-[#2a2a2a] transition-all duration-200 hover:-translate-y-1 hover:shadow-lg group overflow-hidden cursor-pointer"
               >
                 {/* Barra de color superior */}
