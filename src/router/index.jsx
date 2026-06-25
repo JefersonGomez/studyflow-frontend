@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext'
 
 import LoginPage from '../pages/LoginPage'
 import DashboardPage from '../pages/DashboardPage'
-
+import AuthCallbackPage from '../pages/AuthCallbackPage'
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuth()
   return isAuthenticated ? children : <Navigate to="/login" />
@@ -23,6 +23,7 @@ export default function Router() {
           }
         />
         <Route path="*" element={<Navigate to="/dashboard" />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
       </Routes>
     </BrowserRouter>
   )
