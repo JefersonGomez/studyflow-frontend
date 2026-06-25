@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-
+import CoursesPage from "../pages/CoursesPage"
 import LoginPage from '../pages/LoginPage'
 import DashboardPage from '../pages/DashboardPage'
 import AuthCallbackPage from '../pages/AuthCallbackPage'
@@ -24,6 +24,7 @@ export default function Router() {
         />
         <Route path="*" element={<Navigate to="/dashboard" />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/courses" element={<PrivateRoute><CoursesPage /></PrivateRoute>} />
       </Routes>
     </BrowserRouter>
   )
