@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getCourses } from "../api/courses";
 import { getTasksByCourse, createTask, deleteTask } from "../api/tasks";
 import { getNotesByCourse, createNote, deleteNote } from "../api/notes";
+import FileTab from "../components/FileTab"
 import {
   getEventsByCourse,
   createEvent,
@@ -15,6 +16,13 @@ import Layout from "../components/Layout";
 import TaskCard from "../components/TaskCard";
 import NoteCard from "../components/NoteCard";
 
+import { getFilesByCourse, uploadFile, deleteFile } from "../api/files";
+import {
+  analyzePDF,
+  summarizeNote,
+  generateQuestions,
+  generateStudyPlan,
+} from "../api/ai";
 const TABS = ["Tareas", "Notas", "Eventos", "Archivos"];
 
 export default function CourseDetailPage() {
@@ -73,6 +81,11 @@ export default function CourseDetailPage() {
     },
   });
 
+  //files
+  const { data: files, isLoading: loadingFiles } = useQuery({
+    queryKey: ["files", id],
+    queryFn: () => getFilesByCourse(id).then((r) => r.data),
+  });
   // Mutations tareas
   const createTaskMutation = useMutation({
     mutationFn: (data) => createTask(id, data),
@@ -159,6 +172,17 @@ export default function CourseDetailPage() {
       });
     },
   });
+  //files
+  const uploadFileMutation = useMutation({
+    mutationFn: (formData) => uploadFile(id, formData),
+    onSuccess: () => queryClient.invalidateQueries(["files", id]),
+  });
+
+  const deleteFileMutation = useMutation({
+    mutationFn: deleteFile,
+    onSuccess: () => queryClient.invalidateQueries(["files", id]),
+  });
+
   const handleEditClick = (event) => {
     setEditingEvent(event);
     setEventForm({
@@ -399,6 +423,17 @@ export default function CourseDetailPage() {
               })
             )}
           </div>
+        )}
+
+        {activeTab === "Archivos" && (
+          <FileTab
+            files={files}
+            loadingFiles={loadingFiles}
+            courseId={id}
+            onUpload={(formData) => uploadFileMutation.mutate(formData)}
+            onDelete={(fileId) => deleteFileMutation.mutate(fileId)}
+            isUploading={uploadFileMutation.isPending}
+          />
         )}
       </div>
 
