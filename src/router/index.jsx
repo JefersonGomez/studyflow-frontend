@@ -5,6 +5,7 @@ import CoursesPage from "../pages/CoursesPage"
 import LoginPage from '../pages/LoginPage'
 import DashboardPage from '../pages/DashboardPage'
 import AuthCallbackPage from '../pages/AuthCallbackPage'
+import CalendarPage from "../pages/CalendarPage"
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuth()
   return isAuthenticated ? children : <Navigate to="/login" />
@@ -27,6 +28,7 @@ export default function Router() {
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/courses/:id" element={<PrivateRoute><CourseDetailPage /></PrivateRoute>} />
         <Route path="/courses" element={<PrivateRoute><CoursesPage /></PrivateRoute>} />
+        <Route path="/calendar" element={<PrivateRoute><CalendarPage /></PrivateRoute>} />
       </Routes>
     </BrowserRouter>
   )
