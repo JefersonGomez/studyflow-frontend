@@ -5,3 +5,4 @@ export const getTasksByCourse = (courseId) => api.get(`/courses/${courseId}/task
 export const createTask = (courseId, data) => api.post(`/courses/${courseId}/tasks`, data)
 export const deleteTask = (id) => api.delete(`/tasks/${id}`)
 export const updateTask = (id, data) => api.put(`/tasks/${id}`, data)
+export const getAllTasks = () => api.get("/tasks");

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getCourses } from "../api/courses";
 import { getTasksByCourse, createTask, deleteTask } from "../api/tasks";
 import { getNotesByCourse, createNote, deleteNote } from "../api/notes";
-import FileTab from "../components/FileTab"
+import FileTab from "../components/FileTab";
 import {
   getEventsByCourse,
   createEvent,
@@ -12,18 +12,45 @@ import {
   updateEvent,
 } from "../api/events";
 import Layout from "../components/Layout";
-
 import TaskCard from "../components/TaskCard";
 import NoteCard from "../components/NoteCard";
-
 import { getFilesByCourse, uploadFile, deleteFile } from "../api/files";
-import {
-  analyzePDF,
-  summarizeNote,
-  generateQuestions,
-  generateStudyPlan,
-} from "../api/ai";
+
 const TABS = ["Tareas", "Notas", "Eventos", "Archivos"];
+
+// Configuración visual de tipos de eventos
+const EVENT_TYPES = {
+  examen: {
+    icon: "📝",
+    label: "Examen",
+    color: "#ef4444",
+    bg: "rgba(239,68,68,0.1)",
+  },
+  quiz: {
+    icon: "❓",
+    label: "Quiz",
+    color: "#f59e0b",
+    bg: "rgba(245,158,11,0.1)",
+  },
+  proyecto: {
+    icon: "🚀",
+    label: "Proyecto",
+    color: "#8b5cf6",
+    bg: "rgba(139,92,246,0.1)",
+  },
+  laboratorio: {
+    icon: "🧪",
+    label: "Laboratorio",
+    color: "#06b6d4",
+    bg: "rgba(6,182,212,0.1)",
+  },
+  clase: {
+    icon: "📖",
+    label: "Clase",
+    color: "#10b981",
+    bg: "rgba(16,185,129,0.1)",
+  },
+};
 
 export default function CourseDetailPage() {
   const { id } = useParams();
@@ -32,6 +59,9 @@ export default function CourseDetailPage() {
   const [activeTab, setActiveTab] = useState("Tareas");
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+
+  const [expandedNoteId, setExpandedNoteId] = useState(null);
+  const [editingNoteId, setEditingNoteId] = useState(null);
 
   // Form states
   const [taskForm, setTaskForm] = useState({
@@ -49,44 +79,34 @@ export default function CourseDetailPage() {
     endDate: "",
   });
 
-  // Obtener curso actual
+  // Queries
   const { data: courses } = useQuery({
     queryKey: ["courses"],
     queryFn: () => getCourses().then((r) => r.data),
   });
   const course = courses?.find((c) => c.id === id);
 
-  // Tareas
   const { data: tasks, isLoading: loadingTasks } = useQuery({
     queryKey: ["tasks", id],
     queryFn: () => getTasksByCourse(id).then((r) => r.data),
   });
 
-  // Notas
   const { data: notes, isLoading: loadingNotes } = useQuery({
     queryKey: ["notes", id],
     queryFn: () => getNotesByCourse(id).then((r) => r.data),
   });
 
-  // Eventos - SOLO UNA DECLARACIÓN
   const { data: events, isLoading: loadingEvents } = useQuery({
     queryKey: ["events", id],
-    queryFn: () => {
-      console.log("🔍 Obteniendo eventos para curso:", id);
-      return getEventsByCourse(id).then((r) => {
-        console.log("✅ Eventos obtenidos:", r.data);
-        console.log("📊 Cantidad de eventos:", r.data?.length);
-        return r.data;
-      });
-    },
+    queryFn: () => getEventsByCourse(id).then((r) => r.data),
   });
 
-  //files
   const { data: files, isLoading: loadingFiles } = useQuery({
     queryKey: ["files", id],
     queryFn: () => getFilesByCourse(id).then((r) => r.data),
   });
-  // Mutations tareas
+
+  // Mutations
   const createTaskMutation = useMutation({
     mutationFn: (data) => createTask(id, data),
     onSuccess: () => {
@@ -106,7 +126,6 @@ export default function CourseDetailPage() {
     onSuccess: () => queryClient.invalidateQueries(["tasks", id]),
   });
 
-  // Mutations notas
   const createNoteMutation = useMutation({
     mutationFn: (data) => createNote(id, data),
     onSuccess: () => {
@@ -121,20 +140,10 @@ export default function CourseDetailPage() {
     onSuccess: () => queryClient.invalidateQueries(["notes", id]),
   });
 
-  // Mutations eventos
   const createEventMutation = useMutation({
-    mutationFn: (data) => {
-      console.log("📝 Creando evento:", data);
-      return createEvent(data);
-    },
-    onSuccess: (response) => {
-      console.log("✅ Evento creado exitosamente");
-      console.log("🔄 Invalidando queries...");
-
-      // Invalidar y hacer refetch
+    mutationFn: (data) => createEvent(data),
+    onSuccess: () => {
       queryClient.invalidateQueries(["events", id]);
-      queryClient.refetchQueries(["events", id]);
-
       setShowModal(false);
       setEventForm({
         title: "",
@@ -143,26 +152,20 @@ export default function CourseDetailPage() {
         startDate: "",
         endDate: "",
       });
-    },
-    onError: (error) => {
-      console.error("❌ Error creando evento:", error);
     },
   });
 
   const deleteEventMutation = useMutation({
     mutationFn: deleteEvent,
-    onSuccess: () => {
-      console.log("🗑️ Evento eliminado");
-      queryClient.invalidateQueries(["events", id]);
-    },
+    onSuccess: () => queryClient.invalidateQueries(["events", id]),
   });
 
   const updateEventMutation = useMutation({
-    mutationFn: ({ id, data }) => updateEvent(id, data),
+    mutationFn: ({ id: eventId, data }) => updateEvent(eventId, data),
     onSuccess: () => {
       queryClient.invalidateQueries(["events", id]);
       setShowModal(false);
-      setEditingEvent(null); // Resetear modo edición
+      setEditingEvent(null);
       setEventForm({
         title: "",
         description: "",
@@ -172,24 +175,23 @@ export default function CourseDetailPage() {
       });
     },
   });
-  //files
+
   const uploadFileMutation = useMutation({
     mutationFn: (formData) => uploadFile(id, formData),
     onSuccess: () => queryClient.invalidateQueries(["files", id]),
   });
-
   const deleteFileMutation = useMutation({
     mutationFn: deleteFile,
     onSuccess: () => queryClient.invalidateQueries(["files", id]),
   });
 
+  // Handlers
   const handleEditClick = (event) => {
     setEditingEvent(event);
     setEventForm({
       title: event.title,
       description: event.description || "",
       type: event.type,
-      // Convertir fecha ISO a formato YYYY-MM-DD para el input date
       startDate: event.startDate
         ? new Date(event.startDate).toISOString().split("T")[0]
         : "",
@@ -199,9 +201,9 @@ export default function CourseDetailPage() {
     });
     setShowModal(true);
   };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-
     if (activeTab === "Tareas") {
       createTaskMutation.mutate({
         ...taskForm,
@@ -210,7 +212,6 @@ export default function CourseDetailPage() {
     } else if (activeTab === "Notas") {
       createNoteMutation.mutate(noteForm);
     } else if (activeTab === "Eventos") {
-      // Preparamos los datos base igual que antes
       const eventData = {
         title: eventForm.title,
         description: eventForm.description,
@@ -221,60 +222,47 @@ export default function CourseDetailPage() {
           : null,
         courseID: id,
       };
-
-      console.log(" Procesando evento:", eventData);
-
-      // ✅ LÓGICA CONDICIONAL: ¿Estamos editando o creando?
       if (editingEvent) {
-        console.log("️ Modo EDICIÓN para ID:", editingEvent.id);
-        updateEventMutation.mutate({
-          id: editingEvent.id,
-          data: eventData,
-        });
+        updateEventMutation.mutate({ id: editingEvent.id, data: eventData });
       } else {
-        console.log("➕ Modo CREACIÓN");
         createEventMutation.mutate(eventData);
       }
     }
   };
-  // Log para debuggear el renderizado
-  console.log("🎨 Renderizando - activeTab:", activeTab);
-  console.log("🎨 Renderizando - events:", events);
-  console.log("🎨 Renderizando - loadingEvents:", loadingEvents);
 
   return (
     <Layout>
-      <div className="p-8">
+      <div className="p-8 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <button
             onClick={() => navigate("/courses")}
-            className="text-gray-500 hover:text-white transition-colors text-sm"
+            className="text-gray-500 hover:text-white transition-colors text-sm flex items-center gap-1"
           >
             ← Materias
           </button>
           <span className="text-gray-700">/</span>
           <div className="flex items-center gap-3">
             <div
-              className="w-8 h-8 rounded-lg"
+              className="w-8 h-8 rounded-lg shadow-lg"
               style={{ backgroundColor: course?.color || "#10b981" }}
             />
-            <h1 className="text-white font-bold text-xl">
+            <h1 className="text-white font-bold text-2xl tracking-tight">
               {course?.name || "Materia"}
             </h1>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-[#141414] border border-[#1f1f1f] rounded-xl p-1 w-fit">
+        {/* Tabs Navigation */}
+        <div className="flex gap-1 mb-8 bg-[#141414] border border-[#1f1f1f] rounded-xl p-1 w-fit">
           {TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150 ${
+              className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                 activeTab === tab
-                  ? "bg-[#1f1f1f] text-white"
-                  : "text-gray-500 hover:text-gray-300"
+                  ? "bg-[#1f1f1f] text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-300 hover:bg-[#1a1a1a]"
               }`}
             >
               {tab}
@@ -282,21 +270,28 @@ export default function CourseDetailPage() {
           ))}
         </div>
 
-        {/* Contenido del tab + botón agregar */}
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-gray-500 text-sm">
-            {activeTab === "Tareas" && `${tasks?.length || 0} tareas`}
-            {activeTab === "Notas" && `${notes?.length || 0} notas`}
-            {activeTab === "Eventos" && `${events?.length || 0} eventos`}
+        {/* Content Area Header */}
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-gray-500 text-sm font-medium">
+            {activeTab === "Tareas" &&
+              `${tasks?.length || 0} tareas pendientes`}
+            {activeTab === "Notas" && `${notes?.length || 0} notas guardadas`}
+            {activeTab === "Eventos" &&
+              `${events?.length || 0} eventos programados`}
+            {activeTab === "Archivos" &&
+              `${files?.length || 0} archivos subidos`}
           </p>
           {(activeTab === "Tareas" ||
             activeTab === "Notas" ||
             activeTab === "Eventos") && (
             <button
-              onClick={() => setShowModal(true)}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              onClick={() => {
+                setEditingEvent(null);
+                setShowModal(true);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-900/20 flex items-center gap-2"
             >
-              + Agregar{" "}
+              <span>+</span> Agregar{" "}
               {activeTab === "Tareas"
                 ? "tarea"
                 : activeTab === "Notas"
@@ -306,15 +301,13 @@ export default function CourseDetailPage() {
           )}
         </div>
 
-        {/* Tab: Tareas */}
+        {/* TAB: TAREAS */}
         {activeTab === "Tareas" && (
-          <div className="flex flex-col gap-2 max-w-2xl">
+          <div className="flex flex-col gap-3 max-w-3xl">
             {loadingTasks ? (
-              <p className="text-gray-500">Cargando...</p>
+              <p className="text-gray-500 animate-pulse">Cargando tareas...</p>
             ) : tasks?.length === 0 ? (
-              <p className="text-gray-600 py-12 text-center">
-                No hay tareas aún
-              </p>
+              <EmptyState message="No hay tareas aún. ¡Agrega tu primera tarea!" />
             ) : (
               tasks?.map((task) => (
                 <TaskCard key={task.id} task={task} courseId={id} />
@@ -323,101 +316,152 @@ export default function CourseDetailPage() {
           </div>
         )}
 
-        {/* Tab: Notas */}
+        {/* TAB: NOTAS */}
         {activeTab === "Notas" && (
-          <div className="flex flex-col gap-2 max-w-2xl">
+          <div className="flex flex-col gap-3 max-w-3xl">
             {loadingNotes ? (
-              <p className="text-gray-500">Cargando...</p>
+              <p className="text-gray-500 animate-pulse">Cargando notas...</p>
             ) : notes?.length === 0 ? (
-              <p className="text-gray-600 py-12 text-center col-span-3">
-                No hay notas aún
-              </p>
+              <EmptyState message="No hay notas aún. Toma apuntes de esta materia." />
             ) : (
               notes?.map((note) => (
-                <NoteCard key={note.id} note={note} courseId={id} />
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  courseId={id}
+                  isExpanded={expandedNoteId === note.id}
+                  isEditing={editingNoteId === note.id}
+                  onToggle={() =>
+                    setExpandedNoteId(
+                      expandedNoteId === note.id ? null : note.id,
+                    )
+                  }
+                  onEdit={() => {
+                    setEditingNoteId(note.id);
+                    setExpandedNoteId(note.id);
+                  }}
+                  onCancelEdit={() => {
+                    setEditingNoteId(null);
+                    setExpandedNoteId(null);
+                  }}
+                  onSaved={() => setEditingNoteId(null)}
+                />
               ))
             )}
           </div>
         )}
 
-        {/* Tab: Eventos */}
+        {/* TAB: EVENTOS - DISEÑO MODERNO DE TARJETAS */}
         {activeTab === "Eventos" && (
-          <div className="flex flex-col gap-2 max-w-2xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {loadingEvents ? (
-              <p className="text-gray-500">Cargando...</p>
-            ) : !events || events.length === 0 ? (
-              <p className="text-gray-600 py-12 text-center">
-                No hay eventos aún
+              <p className="text-gray-500 col-span-full animate-pulse">
+                Cargando eventos...
               </p>
+            ) : !events || events.length === 0 ? (
+              <div className="col-span-full">
+                <EmptyState message="No hay eventos programados. Agrega exámenes, clases o proyectos." />
+              </div>
             ) : (
               events.map((event) => {
-                const TYPE_COLORS = {
-                  examen: {
-                    color: "#ef4444",
-                    bg: "#ef444415",
-                    label: "Examen",
-                  },
-                  quiz: { color: "#f59e0b", bg: "#f59e0b15", label: "Quiz" },
-                  proyecto: {
-                    color: "#8b5cf6",
-                    bg: "#8b5cf615",
-                    label: "Proyecto",
-                  },
-                  laboratorio: {
-                    color: "#06b6d4",
-                    bg: "#06b6d415",
-                    label: "Laboratorio",
-                  },
-                  clase: { color: "#10b981", bg: "#10b98115", label: "Clase" },
-                };
-                const t = TYPE_COLORS[event.type] || TYPE_COLORS.clase;
+                const typeConfig = EVENT_TYPES[event.type] || EVENT_TYPES.clase;
+                const dateObj = new Date(event.startDate);
+                const day = dateObj.getDate();
+                const month = dateObj
+                  .toLocaleDateString("es-ES", { month: "short" })
+                  .toUpperCase();
+
                 return (
                   <div
                     key={event.id}
-                    className="group flex items-center gap-4 bg-[#141414] border border-[#1f1f1f] rounded-2xl px-5 py-4 hover:border-[#2a2a2a] transition-colors"
+                    className="group relative bg-[#141414] border border-[#1f1f1f] rounded-2xl p-5 hover:border-[#2a2a2a] hover:shadow-xl hover:shadow-black/20 transition-all duration-300 overflow-hidden"
                   >
+                    {/* Acento lateral de color */}
                     <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold"
-                      style={{ backgroundColor: t.bg, color: t.color }}
-                    >
-                      {new Date(event.startDate).getDate()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-medium">
-                        {event.title}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
+                      className="absolute left-0 top-0 bottom-0 w-1"
+                      style={{ backgroundColor: typeConfig.color }}
+                    />
+
+                    <div className="flex gap-4">
+                      {/* Bloque de fecha */}
+                      <div
+                        className="flex flex-col items-center justify-center w-14 h-14 rounded-xl shrink-0"
+                        style={{ backgroundColor: typeConfig.bg }}
+                      >
                         <span
-                          className="text-xs px-2 py-0.5 rounded-full font-medium"
-                          style={{ backgroundColor: t.bg, color: t.color }}
+                          className="text-xl font-black leading-none"
+                          style={{ color: typeConfig.color }}
                         >
-                          {t.label}
+                          {day}
                         </span>
-                        <span className="text-gray-600 text-xs">
-                          {new Date(event.startDate).toLocaleDateString(
-                            "es-ES",
-                            {
-                              day: "numeric",
-                              month: "long",
-                              year: "numeric",
-                            },
-                          )}
+                        <span
+                          className="text-[10px] font-bold uppercase tracking-wider mt-1"
+                          style={{ color: typeConfig.color }}
+                        >
+                          {month}
                         </span>
                       </div>
+
+                      {/* Contenido */}
+                      <div className="flex-1 min-w-0 pt-1">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <h3 className="text-white font-bold text-base truncate leading-tight">
+                            {event.title}
+                          </h3>
+                          <span
+                            className="text-lg shrink-0"
+                            title={typeConfig.label}
+                          >
+                            {typeConfig.icon}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 mb-2">
+                          <span
+                            className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md"
+                            style={{
+                              backgroundColor: typeConfig.bg,
+                              color: typeConfig.color,
+                            }}
+                          >
+                            {typeConfig.label}
+                          </span>
+                          {event.endDate && (
+                            <span className="text-gray-600 text-xs">
+                              →{" "}
+                              {new Date(event.endDate).toLocaleDateString(
+                                "es-ES",
+                                { day: "numeric", month: "short" },
+                              )}
+                            </span>
+                          )}
+                        </div>
+
+                        {event.description && (
+                          <p className="text-gray-500 text-xs line-clamp-2 leading-relaxed">
+                            {event.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <button
-                      onClick={() => handleEditClick(event)}
-                      className="text-gray-600 hover:text-blue-400 text-xs"
-                      title="Editar"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => deleteEventMutation.mutate(event.id)}
-                      className="text-gray-600 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition-all"
-                    >
-                      🗑️
-                    </button>
+
+                    {/* Acciones (aparecen en hover) */}
+                    <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <button
+                        onClick={() => handleEditClick(event)}
+                        className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 flex items-center justify-center transition-colors text-xs"
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => deleteEventMutation.mutate(event.id)}
+                        className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-red-500/20 text-gray-400 hover:text-red-400 flex items-center justify-center transition-colors text-xs"
+                        title="Eliminar"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 );
               })
@@ -425,6 +469,7 @@ export default function CourseDetailPage() {
           </div>
         )}
 
+        {/* TAB: ARCHIVOS */}
         {activeTab === "Archivos" && (
           <FileTab
             files={files}
@@ -437,103 +482,72 @@ export default function CourseDetailPage() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal Unificado */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-[#141414] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-md">
-            <h2 className="text-white font-semibold text-lg mb-5">
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="bg-[#141414] border border-[#1f1f1f] rounded-2xl p-6 w-full max-w-md shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-white font-bold text-xl mb-6 flex items-center gap-2">
               {activeTab === "Eventos"
                 ? editingEvent
-                  ? "Editar evento"
-                  : "Nuevo evento"
+                  ? "✏️ Editar evento"
+                  : "➕ Nuevo evento"
                 : activeTab === "Tareas"
-                  ? "Nueva tarea"
-                  : "Nueva nota"}
+                  ? "📋 Nueva tarea"
+                  : "📝 Nueva nota"}
             </h2>
+
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               {activeTab === "Tareas" && (
                 <>
-                  <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
-                      Título
-                    </label>
-                    <input
-                      type="text"
-                      value={taskForm.title}
-                      onChange={(e) =>
-                        setTaskForm({ ...taskForm, title: e.target.value })
-                      }
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
-                      Descripción
-                    </label>
-                    <input
-                      type="text"
-                      value={taskForm.description}
-                      onChange={(e) =>
-                        setTaskForm({
-                          ...taskForm,
-                          description: e.target.value,
-                        })
-                      }
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
-                      Estado
-                    </label>
-                    <select
-                      value={taskForm.status}
-                      onChange={(e) =>
-                        setTaskForm({ ...taskForm, status: e.target.value })
-                      }
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
-                    >
-                      <option value="pendiente">Pendiente</option>
-                      <option value="en_progreso">En progreso</option>
-                      <option value="completada">Completada</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
-                      Fecha límite
-                    </label>
-                    <input
-                      type="date"
-                      value={taskForm.dueDate}
-                      onChange={(e) =>
-                        setTaskForm({ ...taskForm, dueDate: e.target.value })
-                      }
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
-                      required
-                    />
-                  </div>
+                  <InputField
+                    label="Título"
+                    value={taskForm.title}
+                    onChange={(v) => setTaskForm({ ...taskForm, title: v })}
+                    required
+                  />
+                  <InputField
+                    label="Descripción"
+                    value={taskForm.description}
+                    onChange={(v) =>
+                      setTaskForm({ ...taskForm, description: v })
+                    }
+                  />
+                  <SelectField
+                    label="Estado"
+                    value={taskForm.status}
+                    onChange={(v) => setTaskForm({ ...taskForm, status: v })}
+                    options={[
+                      { value: "pendiente", label: "Pendiente" },
+                      { value: "en_progreso", label: "En progreso" },
+                      { value: "completada", label: "Completada" },
+                    ]}
+                  />
+                  <InputField
+                    label="Fecha límite"
+                    type="date"
+                    value={taskForm.dueDate}
+                    onChange={(v) => setTaskForm({ ...taskForm, dueDate: v })}
+                    required
+                  />
                 </>
               )}
 
               {activeTab === "Notas" && (
                 <>
+                  <InputField
+                    label="Título"
+                    value={noteForm.title}
+                    onChange={(v) => setNoteForm({ ...noteForm, title: v })}
+                    required
+                  />
                   <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
-                      Título
-                    </label>
-                    <input
-                      type="text"
-                      value={noteForm.title}
-                      onChange={(e) =>
-                        setNoteForm({ ...noteForm, title: e.target.value })
-                      }
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
+                    <label className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1.5 block">
                       Contenido
                     </label>
                     <textarea
@@ -541,8 +555,8 @@ export default function CourseDetailPage() {
                       onChange={(e) =>
                         setNoteForm({ ...noteForm, content: e.target.value })
                       }
-                      rows={4}
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors resize-none"
+                      rows={5}
+                      className="w-full bg-[#111] border border-[#2a2a2a] rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all resize-none"
                     />
                   </div>
                 </>
@@ -550,84 +564,71 @@ export default function CourseDetailPage() {
 
               {activeTab === "Eventos" && (
                 <>
-                  <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
-                      Título
-                    </label>
-                    <input
-                      type="text"
-                      value={eventForm.title}
-                      onChange={(e) =>
-                        setEventForm({ ...eventForm, title: e.target.value })
-                      }
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
-                      Tipo
-                    </label>
-                    <select
-                      value={eventForm.type}
-                      onChange={(e) =>
-                        setEventForm({ ...eventForm, type: e.target.value })
-                      }
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
-                    >
-                      <option value="clase">Clase</option>
-                      <option value="examen">Examen</option>
-                      <option value="quiz">Quiz</option>
-                      <option value="proyecto">Proyecto</option>
-                      <option value="laboratorio">Laboratorio</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
-                      Fecha inicio
-                    </label>
-                    <input
+                  <InputField
+                    label="Título"
+                    value={eventForm.title}
+                    onChange={(v) => setEventForm({ ...eventForm, title: v })}
+                    required
+                  />
+                  <SelectField
+                    label="Tipo"
+                    value={eventForm.type}
+                    onChange={(v) => setEventForm({ ...eventForm, type: v })}
+                    options={Object.entries(EVENT_TYPES).map(([k, v]) => ({
+                      value: k,
+                      label: v.label,
+                    }))}
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <InputField
+                      label="Fecha inicio"
                       type="date"
                       value={eventForm.startDate}
-                      onChange={(e) =>
-                        setEventForm({
-                          ...eventForm,
-                          startDate: e.target.value,
-                        })
+                      onChange={(v) =>
+                        setEventForm({ ...eventForm, startDate: v })
                       }
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
                       required
                     />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm mb-1 block">
-                      Fecha fin (opcional)
-                    </label>
-                    <input
+                    <InputField
+                      label="Fecha fin (opcional)"
                       type="date"
                       value={eventForm.endDate}
-                      onChange={(e) =>
-                        setEventForm({ ...eventForm, endDate: e.target.value })
+                      onChange={(v) =>
+                        setEventForm({ ...eventForm, endDate: v })
                       }
-                      className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500 transition-colors"
                     />
                   </div>
+                  <InputField
+                    label="Descripción"
+                    value={eventForm.description}
+                    onChange={(v) =>
+                      setEventForm({ ...eventForm, description: v })
+                    }
+                  />
                 </>
               )}
 
-              <div className="flex gap-3 mt-2">
+              <div className="flex gap-3 mt-4">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 bg-[#1a1a1a] hover:bg-[#222] text-gray-400 text-sm py-2 rounded-lg transition-colors"
+                  className="flex-1 bg-[#1a1a1a] hover:bg-[#222] text-gray-400 text-sm font-bold py-3 rounded-xl transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+                  disabled={
+                    createEventMutation.isPending ||
+                    updateEventMutation.isPending ||
+                    createTaskMutation.isPending ||
+                    createNoteMutation.isPending
+                  }
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-3 rounded-xl transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-50"
                 >
-                  Guardar cambios
+                  {editingEvent && activeTab === "Eventos"
+                    ? "Guardar cambios"
+                    : "Crear"}
                 </button>
               </div>
             </form>
@@ -635,5 +636,54 @@ export default function CourseDetailPage() {
         </div>
       )}
     </Layout>
+  );
+}
+
+// Componentes auxiliares para limpiar el JSX
+function EmptyState({ message }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 bg-[#141414] border border-dashed border-[#2a2a2a] rounded-2xl text-center">
+      <div className="w-16 h-16 rounded-full bg-[#1a1a1a] flex items-center justify-center text-3xl mb-4"></div>
+      <p className="text-gray-400 font-medium">{message}</p>
+    </div>
+  );
+}
+
+function InputField({ label, type = "text", value, onChange, required }) {
+  return (
+    <div>
+      <label className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1.5 block">
+        {label}
+        {required && <span className="text-red-400 ml-1">*</span>}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        className="w-full bg-[#111] border border-[#2a2a2a] rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all [color-scheme:dark]"
+      />
+    </div>
+  );
+}
+
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <div>
+      <label className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1.5 block">
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-[#111] border border-[#2a2a2a] rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all appearance-none cursor-pointer"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }

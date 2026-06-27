@@ -6,6 +6,8 @@ import LoginPage from '../pages/LoginPage'
 import DashboardPage from '../pages/DashboardPage'
 import AuthCallbackPage from '../pages/AuthCallbackPage'
 import CalendarPage from "../pages/CalendarPage"
+import TasksPage from '../pages/TasksPage'
+import NotesPage from '../pages/NotesPage'
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuth()
   return isAuthenticated ? children : <Navigate to="/login" />
@@ -29,6 +31,9 @@ export default function Router() {
         <Route path="/courses/:id" element={<PrivateRoute><CourseDetailPage /></PrivateRoute>} />
         <Route path="/courses" element={<PrivateRoute><CoursesPage /></PrivateRoute>} />
         <Route path="/calendar" element={<PrivateRoute><CalendarPage /></PrivateRoute>} />
+        <Route path="/tasks" element ={<PrivateRoute><TasksPage/></PrivateRoute>}/>
+        <Route path="notes" element ={<PrivateRoute><NotesPage/></PrivateRoute>}/>
+
       </Routes>
     </BrowserRouter>
   )
