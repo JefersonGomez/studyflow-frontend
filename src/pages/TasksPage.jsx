@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAllTasks, deleteTask, updateTask } from "../api/tasks";
 import { getCourses } from "../api/courses";
 import Layout from "../components/Layout";
-import TaskCard from "../components/TaskCard"; // Asumimos que TaskCard puede funcionar en modo modal
+import TaskCard from "../components/TaskCard";
+import ConfirmModal from "../components/ConfirmModal"; // ✅ Importar correctamente
 
 const FILTERS = ["Todas", "Pendientes", "En progreso", "Completadas"];
 
@@ -11,6 +12,7 @@ export default function TasksPage() {
   const [filter, setFilter] = useState("Todas");
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [editingTaskId, setEditingTaskId] = useState(null);
+  const [deleteTaskId, setDeleteTaskId] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: tasks, isLoading: loadingTasks } = useQuery({
@@ -23,11 +25,12 @@ export default function TasksPage() {
     queryFn: () => getCourses().then((r) => r.data),
   });
 
+  // ✅ MUTACIÓN LIMPIA: Solo invalida queries, NO cierra modales aquí
   const deleteMutation = useMutation({
     mutationFn: deleteTask,
     onSuccess: () => {
       queryClient.invalidateQueries(["all-tasks"]);
-      setExpandedTaskId(null);
+      // Los modales ya se cerraron ANTES de llamar a mutate()
     },
   });
 
@@ -39,12 +42,24 @@ export default function TasksPage() {
     },
   });
 
-  // Bloquear scroll cuando el modal está abierto
+  // ✅ Función segura para eliminar: CIERRA MODALES PRIMERO
+  const handleDeleteTask = (taskId) => {
+    setExpandedTaskId(null);   // 1. Cierra modal de enfoque (quita blur/fondo)
+    setEditingTaskId(null);    // 2. Sale de modo edición
+    setDeleteTaskId(null);     // 3. Cierra confirmación (por seguridad)
+    
+    // Pequeño delay para asegurar que React procesó los cierres antes de eliminar
+    setTimeout(() => {
+      deleteMutation.mutate(taskId);
+    }, 50);
+  };
+
+  // Bloquear scroll cuando hay modales abiertos
   useEffect(() => {
-    if (expandedTaskId) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "auto";
+    const hasModalOpen = expandedTaskId || deleteTaskId;
+    document.body.style.overflow = hasModalOpen ? "hidden" : "auto";
     return () => { document.body.style.overflow = "auto"; };
-  }, [expandedTaskId]);
+  }, [expandedTaskId, deleteTaskId]);
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return [];
@@ -67,7 +82,6 @@ export default function TasksPage() {
     };
   }, [tasks]);
 
-  // Encontrar la tarea activa para el modal
   const activeTask = tasks?.find(t => t.id === expandedTaskId);
   const activeCourse = courses?.find(c => c.id === activeTask?.courseId);
 
@@ -83,19 +97,11 @@ export default function TasksPage() {
 
   return (
     <Layout>
-      {/* Animaciones CSS */}
       <style>{`
-        @keyframes fadeSlideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-row-enter { animation: fadeSlideUp 0.4s ease-out forwards; opacity: 0; }
-        
-        @keyframes zoomInModal {
-          from { opacity: 0; transform: scale(0.95) translateY(10px); }
-          to { opacity: 1; transform: scale(1) translateY(0); }
-        }
-        .animate-modal-task { animation: zoomInModal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes fadeSlideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+        .animate-row-enter { animation: fadeSlideUp 0.4s ease-out forwards; opacity:0; }
+        @keyframes zoomInModal { from { opacity:0; transform:scale(0.95) translateY(10px); } to { opacity:1; transform:scale(1) translateY(0); } }
+        .animate-modal-task { animation: zoomInModal 0.3s cubic-bezier(0.16,1,0.3,1) forwards; }
       `}</style>
 
       <div className="max-w-7xl mx-auto p-6 relative z-10">
@@ -103,7 +109,6 @@ export default function TasksPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-black text-white tracking-tight mb-2">Mis Tareas</h1>
           <p className="text-gray-400 text-sm mb-6">Gestiona tus pendientes de todas las materias.</p>
-          
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard label="Total" value={stats.total} color="bg-gray-800" textColor="text-gray-300" />
             <StatCard label="Pendientes" value={stats.pending} color="bg-yellow-500/10" textColor="text-yellow-400" borderColor="border-yellow-500/20" />
@@ -123,7 +128,7 @@ export default function TasksPage() {
           ))}
         </div>
 
-        {/* Tabla de Tareas (Se oscurece si hay modal activo) */}
+        {/* Tabla de Tareas */}
         <div className={`transition-all duration-300 ${expandedTaskId ? "opacity-20 blur-[2px] pointer-events-none" : "opacity-100"}`}>
           {filteredTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 bg-[#141414] border border-dashed border-[#2a2a2a] rounded-2xl">
@@ -132,7 +137,6 @@ export default function TasksPage() {
             </div>
           ) : (
             <div className="w-full bg-[#141414] border border-[#1f1f1f] rounded-2xl overflow-hidden shadow-xl">
-              {/* Header de la tabla */}
               <div className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#1f1f1f] bg-[#111]">
                 <div className="col-span-1" />
                 <div className="col-span-4 text-gray-500 text-xs font-bold uppercase tracking-wider">Tarea</div>
@@ -142,22 +146,13 @@ export default function TasksPage() {
                 <div className="col-span-1" />
               </div>
 
-              {/* Filas */}
               {filteredTasks.map((task, index) => {
                 const course = courses?.find(c => c.id === task.courseId);
                 return (
-                  <div 
-                    key={`task-${task.id}`} 
-                    className="animate-row-enter" 
-                    style={{ animationDelay: `${index * 40}ms` }}
-                  >
-                    {/* Contenedor clickeable que simula la fila */}
-                    <div 
-                      onClick={() => setExpandedTaskId(task.id)}
-                      className="group grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#1f1f1f] hover:bg-[#1a1a1a] cursor-pointer transition-colors items-center"
-                    >
+                  <div key={`task-${task.id}`} className="animate-row-enter" style={{ animationDelay: `${index * 40}ms` }}>
+                    <div onClick={() => setExpandedTaskId(task.id)}
+                      className="group grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#1f1f1f] hover:bg-[#1a1a1a] cursor-pointer transition-colors items-center">
                       <div className="col-span-1 flex justify-center">
-                        {/* Indicador visual simple o checkbox */}
                         <div className={`w-3 h-3 rounded-full ${
                           task.status === 'completada' ? 'bg-emerald-500' : 
                           task.status === 'en_progreso' ? 'bg-blue-500' : 'bg-yellow-500'
@@ -188,23 +183,16 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* ================= MODAL CENTRAL DE TAREA ================= */}
+      {/* MODAL DE TAREA (Focus Mode) - Solo se muestra si activeTask existe */}
       {expandedTaskId && activeTask && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-black/80 backdrop-blur-md animate-in fade-in duration-300"
-          onClick={() => { setExpandedTaskId(null); setEditingTaskId(null); }}
-        >
-          <div 
-            className="bg-[#141414] border border-[#2a2a2a] w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl shadow-black/50 animate-modal-task relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => { setExpandedTaskId(null); setEditingTaskId(null); }}
-              className="absolute top-4 right-4 w-8 h-8 bg-[#1f1f1f] hover:bg-red-500/20 hover:text-red-400 text-gray-400 rounded-full flex items-center justify-center transition-colors z-10"
-            >✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-black/80 backdrop-blur-md animate-in fade-in duration-300"
+          onClick={() => { setExpandedTaskId(null); setEditingTaskId(null); }}>
+          <div className="bg-[#141414] border border-[#2a2a2a] w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl shadow-black/50 animate-modal-task relative"
+            onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { setExpandedTaskId(null); setEditingTaskId(null); }}
+              className="absolute top-4 right-4 w-8 h-8 bg-[#1f1f1f] hover:bg-red-500/20 hover:text-red-400 text-gray-400 rounded-full flex items-center justify-center transition-colors z-10">✕</button>
 
             <div className="p-8">
-              {/* Reutilizamos TaskCard en modo modal/expandido */}
               <TaskCard 
                 task={activeTask}
                 courseId={activeTask.courseId}
@@ -213,21 +201,24 @@ export default function TasksPage() {
                 isEditing={editingTaskId === activeTask.id}
                 onEdit={() => setEditingTaskId(activeTask.id)}
                 onCancelEdit={() => setEditingTaskId(null)}
-                onSaved={() => {
-                  setEditingTaskId(null);
-                  queryClient.invalidateQueries(["all-tasks"]);
-                }}
-                onDelete={() => {
-                  if(window.confirm("¿Eliminar esta tarea?")) {
-                    deleteMutation.mutate(activeTask.id);
-                    setExpandedTaskId(null);
-                  }
-                }}
+                onSaved={() => { setEditingTaskId(null); queryClient.invalidateQueries(["all-tasks"]); }}
+                // ✅ CAMBIO CLAVE: Solo establece el ID para confirmar, NO elimina directamente
+                onDelete={() => setDeleteTaskId(activeTask.id)} 
               />
             </div>
           </div>
         </div>
       )}
+
+      {/* ✅ MODAL DE CONFIRMACIÓN - Siempre renderizado, controlado por deleteTaskId */}
+      <ConfirmModal
+        isOpen={!!deleteTaskId}
+        title="¿Eliminar esta tarea?"
+        message="Esta acción no se puede deshacer. La tarea desaparecerá permanentemente."
+        onConfirm={() => handleDeleteTask(deleteTaskId)}
+        onCancel={() => setDeleteTaskId(null)}
+        isPending={deleteMutation.isPending}
+      />
     </Layout>
   );
 }

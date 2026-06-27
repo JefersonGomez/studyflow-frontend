@@ -12,6 +12,7 @@ export default function NoteCard({
   onEdit,
   onCancelEdit,
   onSaved,
+  onDelete,
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
@@ -100,8 +101,12 @@ export default function NoteCard({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (window.confirm("¿Eliminar esta nota?"))
-                  deleteMutation.mutate();
+                if (onDelete) {
+                  onDelete();
+                } else {
+                  if (window.confirm("¿Eliminar esta nota?"))
+                    deleteMutation.mutate();
+                }
               }}
               className="w-7 h-7 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 flex items-center justify-center"
             >

@@ -5,6 +5,7 @@ import { getCourses } from "../api/courses";
 import { getTasksByCourse, createTask, deleteTask } from "../api/tasks";
 import { getNotesByCourse, createNote, deleteNote } from "../api/notes";
 import FileTab from "../components/FileTab";
+import ConfirmModal from "../components/ConfirmModal";
 import {
   getEventsByCourse,
   createEvent,
@@ -14,9 +15,10 @@ import {
 import Layout from "../components/Layout";
 import TaskCard from "../components/TaskCard";
 import NoteCard from "../components/NoteCard";
+import CourseWhiteboardTab from "../components/CourseWhiteboardTab";
 import { getFilesByCourse, uploadFile, deleteFile } from "../api/files";
 
-const TABS = ["Tareas", "Notas", "Eventos", "Archivos"];
+const TABS = ["Tareas", "Notas", "Eventos", "Archivos", "Pizarras"];
 
 // Configuración visual de tipos de eventos
 const EVENT_TYPES = {
@@ -62,6 +64,17 @@ export default function CourseDetailPage() {
 
   const [expandedNoteId, setExpandedNoteId] = useState(null);
   const [editingNoteId, setEditingNoteId] = useState(null);
+
+  // Estados para NoteCard
+  const [deleteNoteId, setDeleteNoteId] = useState(null);
+
+  // Estados para TaskCard
+  const [expandedTaskId, setExpandedTaskId] = useState(null);
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [deleteTaskId, setDeleteTaskId] = useState(null);
+
+  // Estados para Eventos
+  const [deleteEventId, setDeleteEventId] = useState(null);
 
   // Form states
   const [taskForm, setTaskForm] = useState({
@@ -123,7 +136,11 @@ export default function CourseDetailPage() {
 
   const deleteTaskMutation = useMutation({
     mutationFn: deleteTask,
-    onSuccess: () => queryClient.invalidateQueries(["tasks", id]),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["tasks", id]);
+      setDeleteTaskId(null);
+      setExpandedTaskId(null);
+    },
   });
 
   const createNoteMutation = useMutation({
@@ -137,7 +154,11 @@ export default function CourseDetailPage() {
 
   const deleteNoteMutation = useMutation({
     mutationFn: deleteNote,
-    onSuccess: () => queryClient.invalidateQueries(["notes", id]),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["notes", id]);
+      setDeleteNoteId(null);
+      setExpandedNoteId(null);
+    },
   });
 
   const createEventMutation = useMutation({
@@ -157,7 +178,10 @@ export default function CourseDetailPage() {
 
   const deleteEventMutation = useMutation({
     mutationFn: deleteEvent,
-    onSuccess: () => queryClient.invalidateQueries(["events", id]),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["events", id]),
+     setDeleteEventId(null);
+    }
   });
 
   const updateEventMutation = useMutation({
@@ -310,7 +334,28 @@ export default function CourseDetailPage() {
               <EmptyState message="No hay tareas aún. ¡Agrega tu primera tarea!" />
             ) : (
               tasks?.map((task) => (
-                <TaskCard key={task.id} task={task} courseId={id} />
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  courseId={id}
+                  isExpanded={expandedTaskId === task.id}
+                  isEditing={editingTaskId === task.id}
+                  onToggle={() =>
+                    setExpandedTaskId(
+                      expandedTaskId === task.id ? null : task.id,
+                    )
+                  }
+                  onEdit={() => {
+                    setEditingTaskId(task.id);
+                    setExpandedTaskId(task.id);
+                  }}
+                  onCancelEdit={() => {
+                    setEditingTaskId(null);
+                    setExpandedTaskId(null);
+                  }}
+                  onSaved={() => setEditingTaskId(null)}
+                  onDelete={() => setDeleteTaskId(task.id)}
+                />
               ))
             )}
           </div>
@@ -345,12 +390,12 @@ export default function CourseDetailPage() {
                     setExpandedNoteId(null);
                   }}
                   onSaved={() => setEditingNoteId(null)}
+                  onDelete={() => setDeleteNoteId(note.id)}
                 />
               ))
             )}
           </div>
         )}
-
         {/* TAB: EVENTOS - DISEÑO MODERNO DE TARJETAS */}
         {activeTab === "Eventos" && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -455,7 +500,7 @@ export default function CourseDetailPage() {
                         ✏️
                       </button>
                       <button
-                        onClick={() => deleteEventMutation.mutate(event.id)}
+                        onClick={() => setDeleteEventId(event.id)}
                         className="w-7 h-7 rounded-lg bg-[#1a1a1a] hover:bg-red-500/20 text-gray-400 hover:text-red-400 flex items-center justify-center transition-colors text-xs"
                         title="Eliminar"
                       >
@@ -479,6 +524,14 @@ export default function CourseDetailPage() {
             onDelete={(fileId) => deleteFileMutation.mutate(fileId)}
             isUploading={uploadFileMutation.isPending}
           />
+        )}
+        {/* TAB: Pizara */}
+        {activeTab === "Pizarras" && (
+          <div className="h-[calc(100vh-250px)]">
+            {" "}
+            {/* Ajusta la altura según tu layout */}
+            <CourseWhiteboardTab courseId={id} />
+          </div>
         )}
       </div>
 
@@ -635,6 +688,34 @@ export default function CourseDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Modals */}
+      <ConfirmModal
+        isOpen={!!deleteTaskId}
+        title="¿Eliminar esta tarea?"
+        message="Esta acción no se puede deshacer."
+        onConfirm={() => deleteTaskMutation.mutate(deleteTaskId)}
+        onCancel={() => setDeleteTaskId(null)}
+        isPending={deleteTaskMutation.isPending}
+      />
+
+      <ConfirmModal
+        isOpen={!!deleteNoteId}
+        title="¿Eliminar esta nota?"
+        message="Esta acción no se puede deshacer."
+        onConfirm={() => deleteNoteMutation.mutate(deleteNoteId)}
+        onCancel={() => setDeleteNoteId(null)}
+        isPending={deleteNoteMutation.isPending}
+      />
+
+      <ConfirmModal
+        isOpen={!!deleteEventId}
+        title="¿Eliminar este evento?"
+        message="Esta acción no se puede deshacer."
+        onConfirm={() => deleteEventMutation.mutate(deleteEventId)}
+        onCancel={() => setDeleteEventId(null)}
+        isPending={deleteEventMutation.isPending}
+      />
     </Layout>
   );
 }

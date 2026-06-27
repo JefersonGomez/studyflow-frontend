@@ -8,6 +8,7 @@ const navItems = [
   { to: "/tasks", label: "Tareas", icon: "✓" },
   { to: "/notes", label: "Notas", icon: "📝" },
   { to: "/calendar", label: "Calendario", icon: "📅" },
+  
 ];
 
 export default function Layout({ children }) {
