@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-
+import { analyzePDF, generateStudyPlanByFile } from "../api/ai";
 // Constante de colores fuera del componente para no recrearla en cada render
 const FILE_TYPE_COLORS = {
   examen: { color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)", label: "Examen" },
@@ -35,21 +35,21 @@ export default function FileTab({
     onUpload(formData);
   };
 
-  const handleAI = async (action, fileId) => {
-    setAiLoading(true);
-    setAiResult(null);
-    try {
-      let res;
-      // Simulación de importación, asegúrate de tener tus imports reales
-      if (action === "analyze") res = await analyzePDF(fileId);
-      if (action === "studyplan") res = await generateStudyPlan(fileId, studyDays);
-      setAiResult(res.data);
-    } catch (err) {
-      setAiResult({ error: "Error al procesar con IA. Intenta nuevamente." });
-    } finally {
-      setAiLoading(false);
-    }
-  };
+ const handleAI = async (action, fileId) => {
+  setAiLoading(true);
+  setAiResult(null);
+  try {
+    let res;
+    if (action === "analyze") res = await analyzePDF(fileId);
+    if (action === "studyplan") res = await generateStudyPlanByFile(fileId, studyDays);
+    setAiResult(res.data);
+  } catch (err) {
+    console.error("AI Error:", err?.response?.status, err?.response?.data, err?.message);
+    setAiResult({ error: "Error al procesar con IA. Intenta nuevamente." });
+  } finally {
+    setAiLoading(false);
+  }
+};
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 max-w-6xl mx-auto animate-in fade-in duration-500">

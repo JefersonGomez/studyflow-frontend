@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateNote, deleteNote } from "../api/notes";
+import { useNoteSummary } from "../hooks/useNoteSummary";
+import { useStudyQuiz } from "../hooks/useStudyQuiz";
+import FormattedText from "./FormattedText";
+import StudyQuiz from "./StudyQuiz";
 
 export default function NoteCard({
   note,
@@ -19,16 +23,41 @@ export default function NoteCard({
     title: note.title || "",
     content: note.content || "",
   });
+  
+  // Estado para controlar las pestañas (solo visible en modo lectura expandido)
+  const [activeTab, setActiveTab] = useState("content");
 
+  // Hooks de IA
+  const {
+    content: displayedContent,
+    isSummarized,
+    isLoading: isSummarizing,
+    error: summaryError,
+    toggleSummary,
+  } = useNoteSummary(note.id, note.content);
+
+  const {
+    questions,
+    isLoading: isQuizLoading,
+    error: quizError,
+    hasGenerated,
+    revealAnswer,
+    isAnswerRevealed,
+    regenerate,
+  } = useStudyQuiz(note.id, note.content);
+
+  // Sincronización del formulario
   useEffect(() => {
     setForm({ title: note.title || "", content: note.content || "" });
   }, [note.id]);
+
   useEffect(() => {
     if (!isEditing) {
       setForm({ title: note.title || "", content: note.content || "" });
     }
   }, [note.title, note.content, isEditing]);
 
+  // Mutaciones
   const updateMutation = useMutation({
     mutationFn: (data) => updateNote(note.id, data),
     onSuccess: () => {
@@ -81,10 +110,7 @@ export default function NoteCard({
           <span className="text-gray-600 text-[10px]">
             {new Date(note.createAt || note.createdAt).toLocaleDateString(
               "es-ES",
-              {
-                day: "numeric",
-                month: "short",
-              },
+              { day: "numeric", month: "short" }
             )}
           </span>
 
@@ -115,7 +141,9 @@ export default function NoteCard({
           </div>
 
           <span
-            className={`text-gray-600 text-xs transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+            className={`text-gray-600 text-xs transition-transform duration-200 ${
+              isExpanded ? "rotate-180" : ""
+            }`}
           >
             ▾
           </span>
@@ -126,6 +154,7 @@ export default function NoteCard({
       {isExpanded && (
         <div className="border-t border-[#1f1f1f] px-4 py-4 bg-[#111111]">
           {isEditing ? (
+            /* MODO EDICIÓN */
             <div className="flex flex-col gap-3">
               <div>
                 <label className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1.5 block">
@@ -173,11 +202,106 @@ export default function NoteCard({
               </div>
             </div>
           ) : (
-            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
-              {note.content || (
-                <span className="text-gray-600 italic">Nota vacía</span>
+            /* ✅ MODO LECTURA CON PESTAÑAS DE IA */
+            <div className="relative">
+              {/* Tabs de Navegación */}
+              <div className="flex gap-1 mb-4 bg-[#1a1a1a] p-1 rounded-xl w-fit">
+                <button
+                  onClick={() => setActiveTab("content")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    activeTab === "content"
+                      ? "bg-[#2a2a2a] text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  📄 Contenido
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab("quiz");
+                    if (!hasGenerated) regenerate();
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    activeTab === "quiz"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  🧠 Quiz IA
+                </button>
+              </div>
+
+              {/* Renderizado Condicional por Pestaña */}
+              {activeTab === "content" ? (
+                <div className="relative">
+                  {/* Botón de Resumen con IA */}
+                  <button
+                    onClick={toggleSummary}
+                    disabled={isSummarizing || !note.content}
+                    className={`absolute top-0 right-0 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      isSummarized
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                        : "bg-[#1f1f1f] text-gray-400 border border-[#2a2a2a] hover:text-white hover:border-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    }`}
+                  >
+                    {isSummarizing ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Resumiendo...
+                      </>
+                    ) : isSummarized ? (
+                      <>✨ Ver Original</>
+                    ) : (
+                      <>🤖 Resumir con IA</>
+                    )}
+                  </button>
+
+                  {/* Contenido Formateado */}
+                  <div
+                    className={`transition-opacity duration-300 pt-8 ${
+                      isSummarizing ? "opacity-50" : "opacity-100"
+                    }`}
+                  >
+                    {summaryError ? (
+                      <p className="text-red-400 text-sm p-4 bg-red-500/10 rounded-xl border border-red-500/20">
+                        ⚠️ Error al resumir:{" "}
+                        {summaryError.message || "Inténtalo de nuevo"}
+                      </p>
+                    ) : displayedContent ? (
+                      <FormattedText text={displayedContent} />
+                    ) : note.content ? (
+                      <FormattedText text={note.content} />
+                    ) : (
+                      <span className="text-gray-600 italic">Nota vacía</span>
+                    )}
+                  </div>
+
+                  {/* Indicador de compresión */}
+                  {isSummarized && !isSummarizing && note.content && (
+                    <div className="mt-3 pt-3 border-t border-dashed border-emerald-500/20">
+                      <p className="text-emerald-400/60 text-[10px] font-bold uppercase tracking-wider">
+                        ✨ Resumen generado por IA •{" "}
+                        {note.content.length > 500 && displayedContent
+                          ? `${Math.round(
+                              (displayedContent.length / note.content.length) * 100
+                            )}% del original`
+                          : "Texto condensado"}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Pestaña de Quiz */
+                <StudyQuiz
+                  questions={questions}
+                  isLoading={isQuizLoading}
+                  error={quizError}
+                  onRegenerate={regenerate}
+                  isAnswerRevealed={isAnswerRevealed}
+                  onToggleAnswer={revealAnswer}
+                />
               )}
-            </p>
+            </div>
           )}
         </div>
       )}
