@@ -22,7 +22,7 @@ function AutoSaveWrapper({ whiteboardId }) {
     const handleChange = () => {
       // ✅ CORRECCIÓN: Usar serialize() en lugar de getSnapshot()
       const snapshot = JSON.stringify(editor.store.serialize());
-      
+
       // Solo actualizar si hay cambios reales
       if (snapshot !== elementsRef.current) {
         elementsRef.current = snapshot;
@@ -30,9 +30,9 @@ function AutoSaveWrapper({ whiteboardId }) {
     };
 
     // Suscribirse a cambios en documentos y metadatos
-    const unsubscribe = editor.store.listen(handleChange, { 
-      source: "user", 
-      scope: "document" 
+    const unsubscribe = editor.store.listen(handleChange, {
+      source: "user",
+      scope: "document",
     });
 
     return () => unsubscribe();
@@ -42,7 +42,8 @@ function AutoSaveWrapper({ whiteboardId }) {
   const debouncedElements = useDebounce(elementsRef.current, 1000);
 
   useEffect(() => {
-    if (!whiteboardId || !debouncedElements || debouncedElements === "{}") return;
+    if (!whiteboardId || !debouncedElements || debouncedElements === "{}")
+      return;
 
     const saveToBackend = async () => {
       try {
@@ -66,10 +67,11 @@ export default function WhiteboardCanvas({ initialElements, whiteboardId }) {
   useEffect(() => {
     if (initialElements) {
       try {
-        const parsed = typeof initialElements === 'string' 
-          ? JSON.parse(initialElements) 
-          : initialElements;
-        
+        const parsed =
+          typeof initialElements === "string"
+            ? JSON.parse(initialElements)
+            : initialElements;
+
         // ✅ CORRECCIÓN: Pasar undefined si está vacío para evitar errores
         setSnapshot(Object.keys(parsed).length > 0 ? parsed : undefined);
       } catch (e) {
@@ -83,10 +85,11 @@ export default function WhiteboardCanvas({ initialElements, whiteboardId }) {
 
   return (
     <div className="w-full h-full bg-[#f8f9fa] rounded-2xl overflow-hidden">
-      <Tldraw 
-        snapshot={snapshot} 
+      <Tldraw
+        licenseKey="tldraw-2026-07-13/WyJGdkxFY3ZkLSIsWyIqIl0sMTYsIjIwMjYtMDctMTMiXQ.kJW/yB2ARNrnNeSSkti04G/THuiOoImGCwE2q1TMI0i8FOq2QQclifKN3b2g/EWQzfa7hutA2q4Ib79Kf7c2Jg"
+        snapshot={snapshot}
         autoFocus
-        persistenceKey={whiteboardId} // ← CLAVE: Ayuda a Tldraw a manejar estado interno
+        persistenceKey={whiteboardId}
       >
         <AutoSaveWrapper whiteboardId={whiteboardId} />
       </Tldraw>
