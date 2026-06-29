@@ -230,7 +230,7 @@ export default function CourseDetailPage() {
     if (activeTab === "Tareas") {
       createTaskMutation.mutate({
         ...taskForm,
-        dueDate: new Date(taskForm.dueDate).toISOString(),
+        dueDate: new Date(taskForm.dueDate + "T12:00:00").toISOString(),
       });
     } else if (activeTab === "Notas") {
       createNoteMutation.mutate(noteForm);
@@ -523,9 +523,7 @@ export default function CourseDetailPage() {
             onDelete={(fileId) => deleteFileMutation.mutate(fileId)}
             isUploading={uploadFileMutation.isPending}
             onEventsCreated={() => {
-              queryClient.invalidateQueries({
-                queryKey: ["course-events", id],
-              });
+              queryClient.invalidateQueries({ queryKey: ["events", id] }); // ← corregido
             }}
           />
         )}
