@@ -179,9 +179,8 @@ export default function CourseDetailPage() {
   const deleteEventMutation = useMutation({
     mutationFn: deleteEvent,
     onSuccess: () => {
-      queryClient.invalidateQueries(["events", id]),
-     setDeleteEventId(null);
-    }
+      (queryClient.invalidateQueries(["events", id]), setDeleteEventId(null));
+    },
   });
 
   const updateEventMutation = useMutation({
@@ -523,6 +522,11 @@ export default function CourseDetailPage() {
             onUpload={(formData) => uploadFileMutation.mutate(formData)}
             onDelete={(fileId) => deleteFileMutation.mutate(fileId)}
             isUploading={uploadFileMutation.isPending}
+            onEventsCreated={() => {
+              queryClient.invalidateQueries({
+                queryKey: ["course-events", id],
+              });
+            }}
           />
         )}
         {/* TAB: Pizara */}
