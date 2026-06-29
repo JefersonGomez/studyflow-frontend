@@ -14,10 +14,9 @@ export default function LoginPage() {
     }
   },[isAutenticated])
 
-  const handleGoogleLogin = ()=>{
-    window.location.href = 'http://localhost:3000/api/v1/auth/google'
-  }
-
+ const handleGoogleLogin = () => {
+    window.location.href = `${import.meta.env.VITE_API_URL}/auth/google`
+}
   return( 
 
     <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center">
